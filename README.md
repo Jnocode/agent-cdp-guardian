@@ -5,7 +5,7 @@
 **A fail-closed, privacy-preserving Chrome DevTools Protocol (CDP) Security SDK & Invariant Guard for autonomous AI coding agents (Codex CLI, Hermes, OpenClaw).**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![Python Version](https://img.shields.io/badge/python-3.8%2B-brightgreen.svg)](https://python.org)
+[![Python Version](https://img.shields.io/badge/python-3.9--3.13-brightgreen.svg)](https://python.org)
 [![Zero Dependencies](https://img.shields.io/badge/dependencies-0-success.svg)](https://github.com/Jnocode/agent-cdp-guardian)
 [![Test Suite](https://img.shields.io/badge/tests-passing-brightgreen.svg)](https://github.com/Jnocode/agent-cdp-guardian/actions)
 [![Security Guard](https://img.shields.io/badge/architecture-fail--closed-red.svg)](https://github.com/Jnocode/agent-cdp-guardian)
@@ -101,15 +101,15 @@ Sanitizes raw CDP transcripts, console evaluations, network payloads, and agent 
 
 ## 🚀 Quick Start
 
-### Interactive Demo (< 5 seconds)
+### Interactive Demo (Synthetic ~0.25s / Real Browser ~2.3s)
 
 Try the runnable demonstration script:
 
 ```bash
-# Default mode: pure Python synthetic snapshots (no browser required)
+# Default mode: pure Python synthetic snapshots (no browser required, ~0.25s)
 python examples/demo_safe_session.py
 
-# Live browser mode: launches dedicated headless Chromium on an ephemeral port
+# Live browser mode: launches dedicated headless Chromium on an ephemeral port (~2.3s)
 python examples/demo_safe_session.py --real-browser
 ```
 
@@ -236,13 +236,13 @@ def agent_cdp_execute_tool(guardian: CDPGuardian, cdp_command: dict):
 
 ## 🚦 Verification Status
 
-The integrity of `agent-cdp-guardian` is verified across multiple layers:
+The integrity of `agent-cdp-guardian` is verified across multiple layers (total 47 automated tests = 35 core unit/invariant + 7 synthetic regression + 4 real CDP + 1 CI zero-skip guard):
 
-| Layer | Method | Coverage | CI Status |
+| Layer | Method | Coverage / Invariants Tested | CI Status |
 | :--- | :--- | :--- | :---: |
-| **Unit & Invariant Suite** | `tests/test_*.py` (34 tests) | Redaction, TOCTOU, IdentityGate, TabManager | ✅ Matrix (Python 3.9–3.13) |
-| **Synthetic Regression Lab** | `lab/runner.py` (7 tests) | Account drift, node replacement/removal, OTP masking | ✅ Matrix (Python 3.9–3.13) |
-| **Real CDP Integration** | `tests/test_real_cdp_integration.py` (4 tests) | Live Headless Chromium, DOM extraction, lifecycle isolation | ✅ Dedicated `real-cdp` CI Job |
+| **Unit & Invariant Suite** | `tests/test_*.py`<br>(35 tests across 5 modules) | • `test_guardian.py` (13 tests): TOCTOU hash/timestamp drift, orchestrator safe flow<br>• `test_identity_gate.py` (7 tests): Host allowlist & DOM badge gating<br>• `test_redactor.py` (6 tests): Bearer, JWT, OTP, recursive transcript masking<br>• `test_tab_manager.py` (8 tests): Port/host gating, query redaction (*using mock transport*)<br>• `test_ci_guard.py` (1 test): Subprocess regression assertion enforcing zero skips | ✅ Matrix (Python 3.9–3.13) |
+| **Synthetic Regression Lab** | `lab/runner.py`<br>(7 tests) | Account drift (2), TOCTOU node mutation/removal (3), OTP masking (2) on synthetic DOM fixtures | ✅ Matrix (Python 3.9–3.13) |
+| **Real CDP Integration** | `tests/test_real_cdp_integration.py`<br>(4 tests, *end-to-end integration*) | Live Headless Chromium, DOM extraction, ephemeral port allocation, lifecycle isolation | ✅ Dedicated `real-cdp` CI Job |
 | **Standalone Probes** | `artifacts/.../run_repaired_probes.py` | 5 core vulnerability regression checks | ✅ Verified |
 
 ### Explicitly Unverified / Out of Scope
@@ -252,18 +252,35 @@ The integrity of `agent-cdp-guardian` is verified across multiple layers:
 
 ## 🧪 Running Tests
 
-The test suite requires no external setup or browser instances and runs in < 200ms:
+`agent-cdp-guardian` provides pure-Python core invariant suites alongside live browser CDP integration tests:
+
+### 1. Pure Python Invariants & Synthetic Lab (No Browser Required)
+The core invariant unit tests and synthetic regression lab require no external setup or browser instances and complete in ~3 seconds:
+
+```bash
+# Run core unit and invariant tests (35 tests)
+python -m unittest tests/test_guardian.py tests/test_identity_gate.py tests/test_redactor.py tests/test_tab_manager.py tests/test_ci_guard.py -v
+
+# Run synthetic regression lab (7 tests)
+python -m unittest lab.runner -v
+```
+
+### 2. Full Test Discovery (Includes Real Headless CDP)
+Running standard `unittest discover` discovers all test modules under `tests/`, including `tests/test_real_cdp_integration.py`. When a local Chromium binary (Chrome, Chromium, Edge, or Brave) is present, it automatically launches an isolated headless Chromium instance on an ephemeral random loopback port (never default 9222) with a clean temporary profile, bringing total runtime to ~6–7 seconds:
 
 ```bash
 python -m unittest discover tests -v
 ```
 
-Output:
+Sample output (with Chromium installed):
 ```text
-Ran 34 tests in 0.155s
+Ran 39 tests in 6.905s
 
 OK
 ```
+
+> **Note on Environments without Chromium**:
+> If no Chromium binary is detected, `test_real_cdp_integration` safely skips with `skipped=1` in the runner summary (`Ran 35 tests ... OK (skipped=1)`), while the 35 core invariant tests continue to pass. In CI environments, the dedicated `real-cdp` job sets `GUARDIAN_REQUIRE_REAL_CDP=1` to strictly enforce that real browser tests are never skipped.
 
 ---
 

@@ -49,4 +49,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - TOCTOU Invariant Guard (`TOCTOUGuard`, `PageState`).
 - Sensitive Credential & OTP Redactor (`SecretRedactor`).
 - Isolated Tab Manager (`TabManager`).
-- Unit test suite (34 tests).
+- Unit test suite (35 tests).

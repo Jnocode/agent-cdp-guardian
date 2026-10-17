@@ -2,12 +2,12 @@
 
 # 🛡️ agent-cdp-guardian
 
-**A fail-closed, privacy-preserving Chrome DevTools Protocol (CDP) security proxy & SDK for autonomous AI coding agents (Codex CLI, Hermes, OpenClaw).**
+**A fail-closed, privacy-preserving Chrome DevTools Protocol (CDP) Security SDK & Invariant Guard for autonomous AI coding agents (Codex CLI, Hermes, OpenClaw).**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Python Version](https://img.shields.io/badge/python-3.8%2B-brightgreen.svg)](https://python.org)
 [![Zero Dependencies](https://img.shields.io/badge/dependencies-0-success.svg)](https://github.com/Jnocode/agent-cdp-guardian)
-[![Test Suite](https://img.shields.io/badge/tests-23%20passed-brightgreen.svg)](https://github.com/Jnocode/agent-cdp-guardian/actions)
+[![Test Suite](https://img.shields.io/badge/tests-34%20passed-brightgreen.svg)](https://github.com/Jnocode/agent-cdp-guardian/actions)
 [![Security Guard](https://img.shields.io/badge/architecture-fail--closed-red.svg)](https://github.com/Jnocode/agent-cdp-guardian)
 
 </div>
@@ -24,35 +24,37 @@ However, direct CDP access introduces critical vulnerabilities:
 3. **LLM Context Secret Exfiltration**: Sensitive credentials, 2FA SMS/OTP verification codes, session cookies, and Bearer tokens leak into agent transcript logs and external inference APIs.
 4. **Tab & State Contamination**: Agents attaching directly to the user's primary browser profile risk clobbering active tabs, hijacking cookies, or leaving zombie processes behind.
 
-**`agent-cdp-guardian`** solves this by acting as a zero-dependency, fail-closed mediation layer that enforces strict runtime gates on every CDP frame and DOM interaction.
+**`agent-cdp-guardian`** solves this by acting as a zero-dependency, fail-closed **caller-side security SDK and invariant guard**. It enforces strict runtime gates on action execution, lifecycle management, and transcript logging without requiring a heavyweight proxy daemon.
 
 ---
 
 ## 🏗️ Architecture Overview
+
+> **Design Note**: `agent-cdp-guardian` is an in-process Python SDK and invariant gate—**not** a network-level WebSocket proxy server. The caller provides the WebSocket / CDP transport and DOM extraction, while Guardian enforces identity invariants, TOCTOU consistency, outbound command validation, loopback tab isolation, and transcript redaction.
 
 ```
       +-------------------------------------------------------------+
       |        Autonomous AI Agent (Codex / Hermes / OpenClaw)      |
       +------------------------------+------------------------------+
                                      |
-                       [CDP Invocations & Observables]
+                       [Tool Action & Observables]
                                      |
                                      v
 +-------------------------------------------------------------------------+
-|                        AGENT-CDP-GUARDIAN                               |
+|                    AGENT-CDP-GUARDIAN (Security SDK)                    |
 |                                                                         |
 |  [ Dual-Identity Gate ]                [ In-Flight Secret Redactor ]    |
 |   - Hostname Domain Allowlist           - 2FA / OTP Verification Mask   |
-|   - DOM User Badge Validation           - JWT & Bearer Token Filter     |
-|   - Session Drift Interceptor           - Cookie Header Stripper        |
+|   - DOM User Badge Validation           - Bearer Token & JWT Filter     |
+|   - Pre/Post State Identity Invariant   - Transcript Sanitization       |
 |                                                                         |
 |  [ Fail-Closed TOCTOU Guard ]          [ Tab & Lifecycle Isolation ]   |
-|   - Pre/Post State Checksum             - Dedicated Target Allocation   |
-|   - Node Hash Stability Gate            - Cookie/Profile Isolation      |
-|   - Staleness / Timeout Guard           - Graceful Ephemeral Teardown   |
+|   - Node Disappearance Assertion        - Strict Loopback HTTP Control  |
+|   - Monotonic Timestamp Checks          - No-Redirect (_StrictNoRedirect)|
+|   - Pre/Post Hash Invariant Gate        - Scoped Ephemeral Tab GC       |
 +------------------------------------+------------------------------------+
                                      |
-                     [Sanitized & Guarded CDP Pipe]
+                       [Caller CDP / WebSocket Transport]
                                      |
                                      v
                      +-------------------------------+
@@ -65,31 +67,33 @@ However, direct CDP access introduces critical vulnerabilities:
 
 ## ✨ Core Pillars
 
-### 1. 🔑 Dual-Identity Identity Gate
-Enforces dual-factor verification before any CDP action commits:
+### 1. 🔑 Dual-Identity Gate
+Enforces dual-factor verification before and during any guarded action:
 * **Host Gate**: Validates that target URLs match strictly permitted hostnames or subdomains.
-* **DOM Header Gate**: Validates that dynamic in-DOM identity badges (e.g. `Signed in as user123`) match the expected agent scope. If identity drifts, it **fails closed** immediately (`IdentityDriftError`).
+* **DOM Header Gate**: Validates that dynamic in-DOM identity badges (e.g. `Signed in as user123`) match the expected agent scope in both initial observation and current execution state. If identity drifts, it **fails closed** immediately (`IdentityDriftError`).
 
 ### 2. ⏱️ Fail-Closed TOCTOU Guard
 Eliminates race conditions between observation and execution:
-* Computes cryptographic hashes (SHA-256) of both the DOM snapshot and the exact targeted interactive element.
-* Validates state consistency immediately before executing an action.
-* Rejects stale observations exceeding configured latency thresholds (`TOCTOUDriftError`).
+* Computes SHA-256 hashes of DOM structure and target interactive elements.
+* **Disappearance Detection**: Rejects actions if the targeted element was removed from the DOM before execution.
+* **Timestamp & Latency Invariants**: Enforces monotonic time (`elapsed >= 0`), rejects `NaN` timestamps, and rejects stale observations exceeding latency thresholds (`TOCTOUDriftError`).
 
-### 3. 🛡️ In-Flight Secret & OTP Redactor
-Sanitizes raw CDP streams, console evaluations, network payloads, and agent inspection logs before returning them to the LLM:
+### 3. 🛡️ Transcript Secret & OTP Redactor
+Sanitizes raw CDP transcripts, console evaluations, network payloads, and agent inspection logs before returning them to the LLM:
 * Automatically masks 2FA/SMS/TOTP 6-to-8 digit codes (`[REDACTED_OTP_CODE]`).
 * Strips Bearer authorization headers and raw JWTs.
-* Masks sensitive credential dictionaries (`password`, `secret`, `token`, `private_key`).
-* Completely scrubbed in-flight: sensitive values **never reach LLM token buffers**.
+* Masks sensitive credential dictionaries (`password`, `secret`, `token`, `private_key`) in transcript logs.
+* **Non-Corrupting Outbound Validation**: `filter_cdp_message` performs pure destination validation without mutating legitimate outbound CDP command parameters (such as session tokens).
 
 ### 4. 🗂️ Dedicated Tab & Lifecycle Isolation
 * Allocates pristine ephemeral tabs via CDP `/json/new`.
-* Completely decouples from primary user tabs and avoids polluting persistent browser state.
-* Automatically registers and cleans up all active targets upon task completion or violation.
+* **Hardened Loopback Enforcement**: Restricts connections strictly to `127.0.0.1`, `localhost`, and `::1`.
+* **Anti-SSRF & No-Redirect**: Employs `_StrictNoRedirect` to prevent HTTP redirect hijacking.
+* **Safe Target Lifecycle**: Regex-validates `target_id` against path traversal and blocks deletion of unmanaged tabs.
+* **Error Sanitization**: Masks URL query parameters to ensure sensitive tokens are never leaked into error messages or agent context.
 
 ### 5. 🪶 Zero-Dependency Core
-* Written strictly using Python's standard library (`urllib`, `re`, `hashlib`, `json`, `dataclasses`).
+* Written strictly using Python's standard library (`urllib`, `re`, `hashlib`, `json`, `dataclasses`, `math`).
 * Zero third-party supply chain vulnerabilities.
 * Fast, lightweight, and embeddable into any Python agent runner.
 
@@ -138,7 +142,8 @@ guardian.verify_identity(
 initial_state = PageState.compute(
     url="https://github.com/settings",
     dom_content="<form>...</form>",
-    target_node_content="<button id='save'>Save</button>"
+    target_node_content="<button id='save'>Save</button>",
+    dom_header_text="Signed in as octocat"
 )
 
 def perform_click(element_id):
@@ -180,13 +185,13 @@ In an autonomous agent loop (e.g. tool execution dispatcher), wrap your browser 
 from agent_cdp_guardian import CDPGuardian, GuardianConfig, HostMismatchError, TOCTOUDriftError
 
 def agent_cdp_execute_tool(guardian: CDPGuardian, cdp_command: dict):
-    # Filter incoming navigation or execution payload
+    # Pure validation of navigation or execution payload without mutating parameters
     safe_params = guardian.filter_cdp_message(
         method=cdp_command["method"],
         params=cdp_command.get("params", {})
     )
     
-    # Dispatch to browser
+    # Dispatch to browser via caller's CDP connection
     raw_result = send_raw_cdp_command(cdp_command["method"], safe_params)
     
     # Redact before returning to agent conversation context
@@ -200,10 +205,10 @@ def agent_cdp_execute_tool(guardian: CDPGuardian, cdp_command: dict):
 | Security Feature | Unprotected CDP | Generic Proxy | **agent-cdp-guardian** |
 | :--- | :---: | :---: | :---: |
 | **Fail-Closed by Default** | ❌ No | ⚠️ Partial | ✅ **Yes (Guaranteed)** |
-| **Dual Identity (Host + DOM)** | ❌ None | ❌ None | ✅ **Yes (Cryptographic)** |
-| **TOCTOU Race Prevention** | ❌ None | ❌ None | ✅ **Yes (Hash Pre-verification)** |
-| **In-Flight 2FA/OTP Masking** | ❌ None | ⚠️ Static rules | ✅ **Yes (Dynamic + Structural)** |
-| **Dedicated Tab Isolation** | ❌ Shared | ⚠️ Manual | ✅ **Yes (Isolated & Auto-GC)** |
+| **Dual Identity (Host + DOM)** | ❌ None | ❌ None | ✅ **Yes (SHA-256 + Substring Match)** |
+| **TOCTOU Race & Drift Prevention** | ❌ None | ❌ None | ✅ **Yes (Hash & Node Pre-verification)** |
+| **In-Flight 2FA/OTP Masking** | ❌ None | ⚠️ Static rules | ✅ **Yes (Dynamic Regex + Structural)** |
+| **Dedicated Tab Isolation** | ❌ Shared | ⚠️ Manual | ✅ **Yes (Loopback + Strict No-Redirect)** |
 | **Zero Dependencies** | ❌ N/A | ❌ Third-party pkgs | ✅ **Yes (Python stdlib only)** |
 
 ---
@@ -213,14 +218,12 @@ def agent_cdp_execute_tool(guardian: CDPGuardian, cdp_command: dict):
 The test suite requires no external setup or browser instances and runs in < 200ms:
 
 ```bash
-python -m unittest discover tests
+python -m unittest discover tests -v
 ```
 
 Output:
 ```text
-.......................
-----------------------------------------------------------------------
-Ran 23 tests in 0.155s
+Ran 34 tests in 0.155s
 
 OK
 ```

@@ -7,6 +7,7 @@ between when an agent decides to interact and when the action actually fires.
 """
 
 import hashlib
+import math
 import time
 from dataclasses import dataclass
 from typing import Optional, Dict, Any, Callable
@@ -19,13 +20,15 @@ class PageState:
     dom_hash: str
     target_node_hash: Optional[str] = None
     timestamp: float = 0.0
+    dom_header_text: Optional[str] = None
 
     @classmethod
     def compute(
         cls,
         url: str,
         dom_content: str,
-        target_node_content: Optional[str] = None
+        target_node_content: Optional[str] = None,
+        dom_header_text: Optional[str] = None
     ) -> "PageState":
         dom_hash = hashlib.sha256(dom_content.encode("utf-8")).hexdigest()
         node_hash = None
@@ -35,7 +38,8 @@ class PageState:
             url=url,
             dom_hash=dom_hash,
             target_node_hash=node_hash,
-            timestamp=time.time()
+            timestamp=time.time(),
+            dom_header_text=dom_header_text
         )
 
 
@@ -69,7 +73,12 @@ class TOCTOUGuard:
             )
 
         # 2. Target node check (if target node hash was captured)
-        if initial.target_node_hash and current.target_node_hash:
+        if initial.target_node_hash is not None:
+            if current.target_node_hash is None:
+                raise TOCTOUDriftError(
+                    f"TOCTOU Drift detected: Target node '{target_name}' disappeared from DOM "
+                    f"prior to execution (initial hash={initial.target_node_hash[:8]})."
+                )
             if initial.target_node_hash != current.target_node_hash:
                 raise TOCTOUDriftError(
                     f"TOCTOU Drift detected: Target node '{target_name}' content/structure was altered "
@@ -84,8 +93,13 @@ class TOCTOUGuard:
                 f"(initial hash={initial.dom_hash[:8]}, current hash={current.dom_hash[:8]})."
             )
 
-        # 4. Latency / Staleness threshold
+        # 4. Latency / Staleness threshold & Clock monotonicity
         elapsed = current.timestamp - initial.timestamp
+        if math.isnan(elapsed) or elapsed < 0:
+            raise TOCTOUDriftError(
+                f"TOCTOU Drift detected: Invalid time interval ({elapsed}s) between check and execution. "
+                "Possible clock skew, tampering, or NaN timestamp."
+            )
         if self.max_allowed_drift_seconds > 0 and elapsed > self.max_allowed_drift_seconds:
             raise TOCTOUDriftError(
                 f"TOCTOU Drift detected: Stale state observation ({elapsed:.2f}s > "

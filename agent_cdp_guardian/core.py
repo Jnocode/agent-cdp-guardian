@@ -96,10 +96,23 @@ class CDPGuardian:
         """
         Execute an agent browser action with TOCTOU pre-verification and host boundary assertion.
         """
-        # Validate initial URL against allowed hosts
-        self.verify_identity(current_url=initial_state.url)
+        # Validate initial state URL and DOM header against identity anchors
+        self.verify_identity(
+            current_url=initial_state.url,
+            dom_extracted_header=initial_state.dom_header_text
+        )
+
+        def verified_get_current_state() -> PageState:
+            current_state = get_current_state()
+            # Verify identity anchor consistency on current state as well
+            self.verify_identity(
+                current_url=current_state.url,
+                dom_extracted_header=current_state.dom_header_text
+            )
+            return current_state
+
         return self.toctou_guard.guard_action(
-            get_current_state,
+            verified_get_current_state,
             initial_state,
             action_fn,
             *args,
@@ -109,7 +122,8 @@ class CDPGuardian:
 
     def filter_cdp_message(self, method: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Inspect incoming/outgoing CDP messages to prevent malicious navigation or secret leakage.
+        Inspect incoming/outgoing CDP messages to prevent malicious navigation or illegal domains.
+        Performs pure validation and invariant checks without mutating or corrupting outbound params.
         """
         # Block navigations to disallowed domains
         if method in ("Page.navigate", "Target.createTarget"):
@@ -121,10 +135,7 @@ class CDPGuardian:
                         f"Allowed hosts: {self.config.allowed_hosts}"
                     )
 
-        # Sanitize payloads
-        if self.redactor:
-            params = self.redactor.redact_data(params)
-
+        # Pure validation: outbound parameters must not be mutated
         return params
 
     def create_session(self, initial_url: str = "about:blank") -> TabSession:

@@ -74,6 +74,28 @@ class TestTOCTOUGuard(unittest.TestCase):
             guard.guard_action(lambda: state2, state1, lambda: None)
         self.assertIn("Stale state observation", str(ctx.exception))
 
+    def test_target_node_disappearance_triggers_fail_closed(self):
+        state1 = PageState(url="https://github.com", dom_hash="h1", target_node_hash="node123", timestamp=10.0)
+        state2 = PageState(url="https://github.com", dom_hash="h1", target_node_hash=None, timestamp=10.05)
+        with self.assertRaises(TOCTOUDriftError) as ctx:
+            self.guard.assert_state_consistent(state1, state2, target_name="submit_btn")
+        self.assertIn("disappeared", str(ctx.exception).lower())
+
+    def test_negative_elapsed_triggers_fail_closed(self):
+        state1 = PageState(url="https://github.com", dom_hash="h1", timestamp=2000.0)
+        state2 = PageState(url="https://github.com", dom_hash="h1", timestamp=1000.0)
+        with self.assertRaises(TOCTOUDriftError) as ctx:
+            self.guard.assert_state_consistent(state1, state2)
+        self.assertIn("invalid time interval", str(ctx.exception).lower())
+
+    def test_nan_timestamp_triggers_fail_closed(self):
+        state1 = PageState(url="https://github.com", dom_hash="h1", timestamp=float("nan"))
+        state2 = PageState(url="https://github.com", dom_hash="h1", timestamp=1000.0)
+        with self.assertRaises(TOCTOUDriftError) as ctx:
+            self.guard.assert_state_consistent(state1, state2)
+        self.assertIn("invalid time interval", str(ctx.exception).lower())
+
+
 
 class TestCDPGuardianOrchestrator(unittest.TestCase):
 
@@ -94,7 +116,7 @@ class TestCDPGuardianOrchestrator(unittest.TestCase):
                 params={"url": "https://evil-attacker-site.com/steal"}
             )
 
-    def test_filter_cdp_message_allows_safe_navigation_and_redacts(self):
+    def test_filter_cdp_message_allows_safe_navigation(self):
         params = {
             "url": "https://github.com/octocat/repo",
             "headers": {
@@ -103,7 +125,55 @@ class TestCDPGuardianOrchestrator(unittest.TestCase):
         }
         filtered = self.guardian.filter_cdp_message("Page.navigate", params)
         self.assertEqual(filtered["url"], "https://github.com/octocat/repo")
-        self.assertIn("[REDACTED_BEARER_TOKEN]", filtered["headers"]["Authorization"])
+        self.assertEqual(filtered["headers"]["Authorization"], "Bearer 12345678901234567890")
+
+    def test_guard_action_with_identity_verification(self):
+        # Configure expected_account and dom_header_pattern
+        state = PageState.compute(
+            url="https://github.com/settings",
+            dom_content="<div>Form Content</div>",
+            target_node_content="<button id='save'>Save</button>",
+            dom_header_text="Signed in as octocat"
+        )
+        called = []
+        result = self.guardian.guard_action(
+            get_current_state=lambda: state,
+            initial_state=state,
+            action_fn=lambda x: called.append(x) or "saved",
+            x="ok"
+        )
+        self.assertEqual(result, "saved")
+        self.assertEqual(called, ["ok"])
+
+    def test_guard_action_detects_identity_drift_in_current_state(self):
+        state1 = PageState.compute(
+            url="https://github.com/settings",
+            dom_content="<div>Form Content</div>",
+            dom_header_text="Signed in as octocat"
+        )
+        state2 = PageState.compute(
+            url="https://github.com/settings",
+            dom_content="<div>Form Content</div>",
+            dom_header_text="Signed in as attacker"
+        )
+        with self.assertRaises(IdentityDriftError):
+            self.guardian.guard_action(
+                get_current_state=lambda: state2,
+                initial_state=state1,
+                action_fn=lambda: None
+            )
+
+    def test_filter_cdp_message_does_not_corrupt_outgoing_tokens(self):
+        cmd_params = {
+            "targetId": "tab-123",
+            "token": "session-auth-token-12345",
+            "sessionId": "sub-session-999"
+        }
+        res = self.guardian.filter_cdp_message("Target.sendMessageToTarget", cmd_params)
+        # Should NOT redact outgoing valid tokens
+        self.assertEqual(res["token"], "session-auth-token-12345")
+        self.assertEqual(res["targetId"], "tab-123")
+
 
     def test_sanitize_transcript(self):
         transcript = {

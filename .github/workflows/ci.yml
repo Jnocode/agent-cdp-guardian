@@ -21,6 +21,37 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Run unit tests
+      - name: Run unit and regression suite
         run: |
           python -m unittest discover tests -v
+          python -m unittest lab.runner -v
+
+      - name: Verify zero-skip policy on core invariants
+        run: |
+          python -m unittest tests.test_ci_guard -v
+
+  real-cdp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Verify Google Chrome installation
+        run: |
+          which google-chrome || which chromium-browser || which chromium
+          google-chrome --version || chromium --version
+
+      - name: Run Real CDP Integration Tests (Strict Mode)
+        env:
+          GUARDIAN_REQUIRE_REAL_CDP: "1"
+        run: |
+          python -m unittest tests.test_real_cdp_integration -v
+
+      - name: Run Demo Session with Real Headless Browser
+        run: |
+          python examples/demo_safe_session.py --real-browser
+

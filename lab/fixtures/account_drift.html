@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Synthetic Lab - Account Drift</title>
+</head>
+<body>
+  <div id="user-badge" class="header-user-status">alice@example.test</div>
+  <h1>Settings Dashboard</h1>
+  <button id="save-btn">Save Preferences</button>
+  <script>
+    // Helper function for drift simulation
+    function simulateAccountDrift(newAccount) {
+      document.getElementById('user-badge').textContent = newAccount;
+    }
+  </script>
+</body>
+</html>

@@ -7,7 +7,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Python Version](https://img.shields.io/badge/python-3.8%2B-brightgreen.svg)](https://python.org)
 [![Zero Dependencies](https://img.shields.io/badge/dependencies-0-success.svg)](https://github.com/Jnocode/agent-cdp-guardian)
-[![Test Suite](https://img.shields.io/badge/tests-34%20passed-brightgreen.svg)](https://github.com/Jnocode/agent-cdp-guardian/actions)
+[![Test Suite](https://img.shields.io/badge/tests-passing-brightgreen.svg)](https://github.com/Jnocode/agent-cdp-guardian/actions)
 [![Security Guard](https://img.shields.io/badge/architecture-fail--closed-red.svg)](https://github.com/Jnocode/agent-cdp-guardian)
 
 </div>
@@ -101,6 +101,24 @@ Sanitizes raw CDP transcripts, console evaluations, network payloads, and agent 
 
 ## 🚀 Quick Start
 
+### Interactive Demo (< 5 seconds)
+
+Try the runnable demonstration script:
+
+```bash
+# Default mode: pure Python synthetic snapshots (no browser required)
+python examples/demo_safe_session.py
+
+# Live browser mode: launches dedicated headless Chromium on an ephemeral port
+python examples/demo_safe_session.py --real-browser
+```
+
+The script demonstrates:
+1. Permitted action execution on consistent DOM state
+2. Interception of unauthorized outbound navigation
+3. Blocking of live DOM identity drift
+4. Sanitization of sensitive OTP codes and authorization tokens in transcripts
+
 ### Installation
 
 ```bash
@@ -150,7 +168,7 @@ def perform_click(element_id):
     print(f"Executing CDP click on #{element_id}")
     return {"status": "ok"}
 
-# Re-inspects state atomically before triggering execution
+# Re-inspects state immediately before dispatching execution
 result = guardian.guard_action(
     get_current_state=lambda: initial_state, # In practice, fetch live state from CDP
     initial_state=initial_state,
@@ -204,7 +222,7 @@ def agent_cdp_execute_tool(guardian: CDPGuardian, cdp_command: dict):
 
 | Security Feature | Unprotected CDP | Generic Proxy | **agent-cdp-guardian** |
 | :--- | :---: | :---: | :---: |
-| **Fail-Closed by Default** | ❌ No | ⚠️ Partial | ✅ **Yes (Guaranteed)** |
+| **Fail-Closed by Design** | ❌ No | ⚠️ Partial | ✅ **Yes (Strict Exceptions)** |
 | **Dual Identity (Host + DOM)** | ❌ None | ❌ None | ✅ **Yes (SHA-256 + Substring Match)** |
 | **TOCTOU Race & Drift Prevention** | ❌ None | ❌ None | ✅ **Yes (Hash & Node Pre-verification)** |
 | **In-Flight 2FA/OTP Masking** | ❌ None | ⚠️ Static rules | ✅ **Yes (Dynamic Regex + Structural)** |
@@ -213,7 +231,26 @@ def agent_cdp_execute_tool(guardian: CDPGuardian, cdp_command: dict):
 
 ---
 
-## 🚦 Running Tests
+
+---
+
+## 🚦 Verification Status
+
+The integrity of `agent-cdp-guardian` is verified across multiple layers:
+
+| Layer | Method | Coverage | CI Status |
+| :--- | :--- | :--- | :---: |
+| **Unit & Invariant Suite** | `tests/test_*.py` (34 tests) | Redaction, TOCTOU, IdentityGate, TabManager | ✅ Matrix (Python 3.9–3.13) |
+| **Synthetic Regression Lab** | `lab/runner.py` (7 tests) | Account drift, node replacement/removal, OTP masking | ✅ Matrix (Python 3.9–3.13) |
+| **Real CDP Integration** | `tests/test_real_cdp_integration.py` (4 tests) | Live Headless Chromium, DOM extraction, lifecycle isolation | ✅ Dedicated `real-cdp` CI Job |
+| **Standalone Probes** | `artifacts/.../run_repaired_probes.py` | 5 core vulnerability regression checks | ✅ Verified |
+
+### Explicitly Unverified / Out of Scope
+- **Non-Chromium Browsers**: WebKit / Firefox CDP adapters have not been tested.
+- **Microsecond High-Frequency Execution**: Pre-check overhead on high-frequency scraping (> 1,000 req/sec) has not been profiled.
+- **Non-Windows Desktop Tab Native Cleanup**: Beyond standard HTTP `/json/close` lifecycle commands.
+
+## 🧪 Running Tests
 
 The test suite requires no external setup or browser instances and runs in < 200ms:
 
@@ -232,4 +269,6 @@ OK
 
 ## 📄 License
 
-This project is licensed under the [MIT License](LICENSE).
+- Security policy, threat model, and vulnerability reporting: [SECURITY.md](SECURITY.md).
+- Detailed release history: [CHANGELOG.md](CHANGELOG.md).
+- Licensed under the [MIT License](LICENSE).

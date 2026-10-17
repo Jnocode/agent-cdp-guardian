@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agent-cdp-guardian"
-version = "0.1.0"
-description = "A fail-closed, privacy-preserving CDP security proxy & SDK for autonomous AI coding agents (Codex CLI, Hermes, OpenClaw)."
+version = "0.2.0"
+description = "A fail-closed, privacy-preserving CDP security SDK and invariant guard for autonomous AI coding agents (Codex CLI, Hermes, OpenClaw)."
 readme = "README.md"
 requires-python = ">=3.8"
 license = { text = "MIT" }

@@ -2,7 +2,7 @@
 agent-cdp-guardian
 ~~~~~~~~~~~~~~~~~~
 A fail-closed, privacy-preserving Chrome DevTools Protocol (CDP) security
-proxy and isolation SDK for autonomous AI coding agents.
+SDK and isolation invariant guard for autonomous AI coding agents.
 """
 
 from .core import CDPGuardian, GuardianConfig
@@ -22,7 +22,7 @@ from .exceptions import (
     RedactionError,
 )
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 __all__ = [
     "CDPGuardian",
     "GuardianConfig",

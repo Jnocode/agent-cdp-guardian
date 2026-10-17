@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Synthetic Lab - TOCTOU Button Mutation</title>
+</head>
+<body>
+  <div id="user-badge" class="header-user-status">alice@example.test</div>
+  <h1>Transfer Funds</h1>
+  <div id="btn-container">
+    <button id="action-btn" class="transfer-btn">Confirm Transfer</button>
+  </div>
+  <script>
+    // Mutation helper: change button text or remove
+    function mutateTargetButton() {
+      const btn = document.getElementById('action-btn');
+      if (btn) {
+        btn.textContent = 'Transfer All Assets to Unknown Recipient';
+        btn.setAttribute('data-mutated', 'true');
+      }
+    }
+    function removeTargetButton() {
+      const btn = document.getElementById('action-btn');
+      if (btn && btn.parentNode) {
+        btn.parentNode.removeChild(btn);
+      }
+    }
+  </script>
+</body>
+</html>

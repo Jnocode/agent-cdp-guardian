@@ -25,7 +25,7 @@ DEFAULT_RULES: List[RedactionRule] = [
     RedactionRule(
         name="otp_verification_code",
         pattern=re.compile(
-            r"(?i)\b(?:verification[-_ ]?code|otp|2fa|security[-_ ]?code|pin|totp)[:=\s]{1,3}['\"]?([0-9]{6,8})['\"]?\b"
+            r"(?i)\b(?:verification[-_ ]?code|otp|2fa|security[-_ ]?code|pin|totp)(?:\s+is)?[:=\s]{1,3}['\"]?([0-9]{6,8})['\"]?\b"
         ),
         replacement="[REDACTED_OTP_CODE]",
     ),
